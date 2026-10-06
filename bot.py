@@ -78,10 +78,10 @@ def log(*args, **kwargs):
 #  CONFIG
 # ==============================================================================
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8806693453:AAEK1F7FTsAHMc5PdfeIYeIlWHJgbnGRb8o")
-ADMIN_IDS = [8806693453]
-CONTACT_USERNAME = "@HtetLay_bot"
-CONTACT_LINK = "https://t.me/HtetLay_bot"
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8400956534:AAGhysVeI9CqHJX8wuVrpguWlZPbRu6Q9Eg")
+ADMIN_IDS = [7856294500]
+CONTACT_USERNAME = "@NgaTON_0"
+CONTACT_LINK = "https://t.me/NgaTON_0"
 
 # Files
 FILE_PATH = "allinone.txt"
@@ -1036,7 +1036,6 @@ async def worker(worker_id, headers_unused, user_id):
             session_codes = 0
 
             while not stop_event.is_set() and session_codes < MAX_CODES_PER_SESSION:
-                #  FIXED: reuse sid until MAX_CODES_PER_SID
                 if sid is None or codes_this_sid >= MAX_CODES_PER_SID:
                     new_sid, _ = await get_sid_from_gateway(session, state["portal_url"])
                     if not new_sid:
@@ -1087,7 +1086,6 @@ async def worker(worker_id, headers_unused, user_id):
                     state["last_hit"] = code
                     state["recent_logs"].append(f"🔥 HIT: {code}")
 
-                    # FIXED: extract token from voucher response
                     active_token = sid
                     if body:
                         m = re.search(r'token=([^&\s"\'<>]+)', body, re.IGNORECASE)
