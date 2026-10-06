@@ -78,8 +78,8 @@ def log(*args, **kwargs):
 #  CONFIG
 # ==============================================================================
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8585973091:AAE2aWb509VH8bMbnfOwdLGExrlvryQDyLk")
-ADMIN_IDS = [880859873]
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8806693453:AAEK1F7FTsAHMc5PdfeIYeIlWHJgbnGRb8o")
+ADMIN_IDS = [8806693453]
 CONTACT_USERNAME = "@NgaTON_0"
 CONTACT_LINK = "https://t.me/NgaTON_0"
 
