@@ -141,7 +141,7 @@ MODES = {
     "num6": "🩸 06 • NUM", "num7": "🩸 07 • NUM", "num8": "🩸 08 • NUM",
     "num9": "🩸 09 • NUM", "num10": "🩸 10 • NUM",
     "eng6": "🦇 06 • ENG", "eng7": "🦇 07 • ENG", "eng8": "🦇 08 • ENG",
-    "mix6": "💀 06 • MIX", "mix7": "💀 07 • MIX", "mix8": "💀 08 • MIX",
+    "mix6": "💀 06 • MIX", "mix7": "💀 07 • MIX", "mix8": "💀 08 • MIX", "mix9": "🗝️ 09 • MIX"
     "abc6": "📜 06 • ABC", "custom": "🔮 Custom",
 }
 
