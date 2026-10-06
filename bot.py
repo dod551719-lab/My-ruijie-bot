@@ -11,8 +11,6 @@
   - "request limited" → retry 5x before give up
   - Balance token extraction from voucher response
   - flush=True everywhere for live debug
-  - ADDED: mix9 mode
-  - ADDED: 💾 Saved icon & button
 """
 
 import os
@@ -136,7 +134,7 @@ _MODE_SPEC: Dict[str, Tuple[tuple, int]] = {
     "num9": (_T_D, 9), "num10": (_T_D, 10),
     "eng6": (_T_A, 6), "eng7": (_T_A, 7), "eng8": (_T_A, 8),
     "mix6": (_T_M, 6), "mix7": (_T_M, 7), "mix8": (_T_M, 8),
-    "mix9": (_T_M, 9),   # ★ ADDED mix9
+    "mix9": (_T_M, 9),
     "abc6": (_T_A, 6),
 }
 
@@ -145,7 +143,7 @@ MODES = {
     "num9": "🩸 09 • NUM", "num10": "🩸 10 • NUM",
     "eng6": "🦇 06 • ENG", "eng7": "🦇 07 • ENG", "eng8": "🦇 08 • ENG",
     "mix6": "💀 06 • MIX", "mix7": "💀 07 • MIX", "mix8": "💀 08 • MIX",
-    "mix9": "💀 09 • MIX",   # ★ ADDED mix9
+    "mix9": "💀 09 • MIX",
     "abc6": "📜 06 • ABC", "custom": "🔮 Custom",
 }
 
@@ -659,6 +657,7 @@ def generate_random_mac() -> str:
 
 
 def replace_mac_urlparse(url: str, new_mac: str) -> str:
+    """ FIXED:  — urlparse + urlencode"""
     try:
         u = urlparse(url)
         query = parse_qs(u.query)
@@ -672,10 +671,15 @@ def replace_mac_urlparse(url: str, new_mac: str) -> str:
 
 
 # ==============================================================================
-#  GATEWAY
+#  GATEWAY —  FIXED: 7.py style 2-GET JS redirect follow + minimal headers
 # ==============================================================================
 
 async def get_sid_from_gateway(session, portal_url):
+    """
+      1. GET spoofed_url (with mac)
+      2. If body has location.href=..., do 2nd GET to follow
+      3. Parse sessionId / sid from final URL query
+    """
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
     }
@@ -826,7 +830,7 @@ def _deep_find_plan(obj, depth=0):
 
 
 # ==============================================================================
-#  BALANCE
+#  BALANCE —  FIXED: use token from voucher response (fallback sid)
 # ==============================================================================
 
 async def fetch_balance_reuse_session(session, active_token, proxy, portal_base):
@@ -885,10 +889,16 @@ async def fetch_balance_reuse_session(session, active_token, proxy, portal_base)
 
 
 # ==============================================================================
-#  CHECKER
+#  CHECKER —  FIXED: "request limited" retry 5x + returns (result, body)
 # ==============================================================================
 
 async def check_single_access_code(session, code, sid, endpoints, proxy):
+    """
+     seven.py style:
+      - Clean referer (no RES, no sessionId)
+      - Retry 5x on "request limited"
+      - Return (result, body)
+    """
     if not sid:
         return "net", None
 
@@ -992,7 +1002,7 @@ def make_code(mode, counter=None):
 
 
 # ==============================================================================
-#  WORKER
+#  WORKER —  FIXED: sid reuse 30 codes
 # ==============================================================================
 
 async def worker(worker_id, headers_unused, user_id):
@@ -1026,6 +1036,7 @@ async def worker(worker_id, headers_unused, user_id):
             session_codes = 0
 
             while not stop_event.is_set() and session_codes < MAX_CODES_PER_SESSION:
+                #  FIXED: reuse sid until MAX_CODES_PER_SID
                 if sid is None or codes_this_sid >= MAX_CODES_PER_SID:
                     new_sid, _ = await get_sid_from_gateway(session, state["portal_url"])
                     if not new_sid:
@@ -1076,6 +1087,7 @@ async def worker(worker_id, headers_unused, user_id):
                     state["last_hit"] = code
                     state["recent_logs"].append(f"🔥 HIT: {code}")
 
+                    # FIXED: extract token from voucher response
                     active_token = sid
                     if body:
                         m = re.search(r'token=([^&\s"\'<>]+)', body, re.IGNORECASE)
@@ -1179,10 +1191,6 @@ async def live_dashboard_updater(context, user_id):
             hit_section = _build_hit_section(state.get("hit_details", []), state["hits"])
             proxy_mode = f"🕷️ {active}" if active > 0 else "⚡ DIRECT"
 
-            # ★ Saved icon in dashboard
-            saved = get_saved_state(user_id)
-            saved_icon = " 💾" if saved else ""
-
             text = (
                 "╔═════════════════════════╗\n"
                 "║   ⚡ <b>NGATON SCANNER</b> ⚡   ║\n"
@@ -1207,7 +1215,7 @@ async def live_dashboard_updater(context, user_id):
                 "\n"
                 f"{hit_section}\n"
                 "\n"
-                f"╭─ ⚡ NGATON · @NgaTON_0{saved_icon} ─╮"
+                "╭─ ⚡ NGATON · @NgaTON_0 ─╮"
             )
             markup = InlineKeyboardMarkup([
                 [InlineKeyboardButton("🛑 STOP SCAN", callback_data="stop_scan")]
@@ -1383,12 +1391,11 @@ async def run_user_scanner(context, user_id):
 
 
 # ==============================================================================
-#  MENU MARKUPS  ★ UPDATED: mix9 button + 💾 Saved button
+#  MENU MARKUPS 
 # ==============================================================================
 
-def get_main_menu_markup(user_id: int = 0):
-    """★ Main menu with 💾 Saved button"""
-    buttons = [
+def get_main_menu_markup():
+    return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔮 PORTAL", callback_data="btn_update_portal"),
          InlineKeyboardButton("📜 MODES", callback_data="btn_mode_menu")],
         [InlineKeyboardButton("⚡ START SCAN", callback_data="btn_start_scanner"),
@@ -1396,24 +1403,12 @@ def get_main_menu_markup(user_id: int = 0):
         [InlineKeyboardButton("👁️ STATUS", callback_data="btn_proxy_status"),
          InlineKeyboardButton("🧹 CLEAR", callback_data="btn_clear_proxies")],
         [InlineKeyboardButton("🕷️ PROXIES", callback_data="btn_add_proxies")],
-    ]
-
-    # ★ Add 💾 Saved button if saved state exists
-    if user_id:
-        saved = get_saved_state(user_id)
-        if saved:
-            buttons.append([
-                InlineKeyboardButton("💾 SAVED JOB", callback_data="btn_view_saved"),
-                InlineKeyboardButton("🗑️ DELETE SAVED", callback_data="btn_delete_saved"),
-            ])
-
-    buttons.append([InlineKeyboardButton("⚡ NGATON ⚡", url=CONTACT_LINK)])
-
-    return InlineKeyboardMarkup(buttons)
+        [InlineKeyboardButton("💾 SAVED", callback_data="btn_view_saved")],
+        [InlineKeyboardButton("⚡ NGATON ⚡", url=CONTACT_LINK)],
+    ])
 
 
 def get_mode_menu_markup():
-    """★ Mode menu with mix9 button added"""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🩸 06 NUM", callback_data="set_mode_num6"),
          InlineKeyboardButton("🩸 07 NUM", callback_data="set_mode_num7")],
@@ -1426,7 +1421,7 @@ def get_mode_menu_markup():
         [InlineKeyboardButton("💀 06 MIX", callback_data="set_mode_mix6"),
          InlineKeyboardButton("💀 07 MIX", callback_data="set_mode_mix7")],
         [InlineKeyboardButton("💀 08 MIX", callback_data="set_mode_mix8"),
-         InlineKeyboardButton("💀 09 MIX", callback_data="set_mode_mix9")],  # ★ ADDED
+         InlineKeyboardButton("💀 09 MIX", callback_data="set_mode_mix9")],
         [InlineKeyboardButton("📜 06 ABC", callback_data="set_mode_abc6"),
          InlineKeyboardButton("🔮 CUSTOM", callback_data="set_mode_custom")],
         [InlineKeyboardButton("🦇 RETURN", callback_data="btn_back_main")],
@@ -1446,13 +1441,11 @@ def _build_main_menu_text(mode, active, saved_url, user_id):
     saved = get_saved_state(user_id)
     resume_line = ""
     if saved and saved.get("url") == (saved_url or ""):
-        # ★ Show 💾 saved icon with details
         resume_line = (
             f"\n💾 <b>Saved Job</b>\n"
             f"├ Tried: <code>{saved.get('tried', 0):,}</code>\n"
             f"├ Hits:  <code>{saved.get('hits', 0)}</code>\n"
-            f"├ Mode:  <code>{MODES.get(saved.get('mode','num6'), '')}</code>\n"
-            f"└ 💾 Auto-resume on START\n"
+            f"└ Mode:  <code>{MODES.get(saved.get('mode','num6'), '')}</code>\n"
         )
 
     return (
@@ -1472,7 +1465,7 @@ def _build_main_menu_text(mode, active, saved_url, user_id):
 
 
 # ==============================================================================
-#  TELEGRAM HANDLERS  ★ UPDATED: mix9 + 💾 Saved handlers
+#  TELEGRAM HANDLERS
 # ==============================================================================
 
 async def cmd_start(update, context):
@@ -1483,21 +1476,9 @@ async def cmd_start(update, context):
     saved_url = get_user_portal(user_id)
 
     text = _build_main_menu_text(mode, active, saved_url, user_id)
-    markup = get_main_menu_markup(user_id)  # ★ pass user_id
+    markup = get_main_menu_markup()
 
     await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
-
-
-async def cmd_help(update, context):
-    await update.message.reply_text(
-        "⚡ <b>NGATON HELP</b> ⚡\n\n"
-        "🔮 /start — Main menu\n"
-        "🕷️ /proxy — Add proxies\n"
-        "📜 /mode — Change mode\n"
-        "💾 /saved — View saved job\n\n"
-        "📌 @NgaTON_0",
-        parse_mode=ParseMode.HTML
-    )
 
 
 async def callback_handler(update, context):
@@ -1517,7 +1498,7 @@ async def callback_handler(update, context):
             saved_url = get_user_portal(user_id)
 
             text = _build_main_menu_text(mode_key, active, saved_url, user_id)
-            markup = get_main_menu_markup(user_id)  # ★ pass user_id
+            markup = get_main_menu_markup()
 
             try:
                 await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
@@ -1533,7 +1514,7 @@ async def callback_handler(update, context):
         saved_url = get_user_portal(user_id)
 
         text = _build_main_menu_text(mode, active, saved_url, user_id)
-        markup = get_main_menu_markup(user_id)  # ★ pass user_id
+        markup = get_main_menu_markup()
 
         try:
             await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
@@ -1652,7 +1633,7 @@ async def callback_handler(update, context):
             pass
         return
 
-    # ─── ★ VIEW SAVED JOB ───
+    # ─── VIEW SAVED ───
     if data == "btn_view_saved":
         saved = get_saved_state(user_id)
         if saved:
@@ -1664,28 +1645,22 @@ async def callback_handler(update, context):
                 hits_text = "\n  💀 No hits"
 
             text = (
-                "💾 <b>SAVED JOB</b>\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "💾 <b>SAVED JOB</b>\n\n"
                 f"📜 Mode:   <code>{MODES.get(saved.get('mode','num6'), '')}</code>\n"
                 f"👁️ Tried:  <code>{saved.get('tried', 0):,}</code>\n"
                 f"🩸 Hits:   <code>{saved.get('hits', 0)}</code>\n"
                 f"⚠️ Limits: <code>{saved.get('limits', 0)}</code>\n"
-                f"❌ Errors: <code>{saved.get('net', 0)}</code>\n"
                 f"🗡️ Last:   <code>{saved.get('last_hit', '—')}</code>\n"
                 f"🕐 Saved:  <code>{saved.get('updated_at', 'N/A')}</code>\n"
-                f"🔮 URL:    <code>{saved.get('url', 'N/A')[:50]}...</code>\n"
                 "\n"
                 f"🎁 <b>HITS</b>{hits_text}\n"
-                "\n"
-                "⚡ Press START to resume this job"
             )
             markup = InlineKeyboardMarkup([
-                [InlineKeyboardButton("⚡ RESUME", callback_data="btn_start_scanner"),
-                 InlineKeyboardButton("🗑️ DELETE", callback_data="btn_delete_saved")],
+                [InlineKeyboardButton("🗑️ DELETE SAVED", callback_data="btn_delete_saved")],
                 [InlineKeyboardButton("🦇 RETURN", callback_data="btn_back_main")],
             ])
         else:
-            text = "💾 <b>No Saved Job</b>\n\n💀 Nothing to resume"
+            text = "💾 <b>No Saved Job</b>\n\n💀 Nothing saved"
             markup = get_back_markup()
 
         try:
@@ -1694,7 +1669,7 @@ async def callback_handler(update, context):
             pass
         return
 
-    # ─── ★ DELETE SAVED JOB ───
+    # ─── DELETE SAVED ───
     if data == "btn_delete_saved":
         clear_saved_state(user_id)
         clear_tried_codes(user_id)
@@ -1704,7 +1679,7 @@ async def callback_handler(update, context):
         saved_url = get_user_portal(user_id)
 
         text = _build_main_menu_text(mode, active, saved_url, user_id)
-        markup = get_main_menu_markup(user_id)
+        markup = get_main_menu_markup()
 
         try:
             await query.edit_message_text(
@@ -1718,7 +1693,6 @@ async def callback_handler(update, context):
 
 
 async def message_handler(update, context):
-    """Handle text messages (portal URL, proxies)"""
     user_id = update.effective_user.id
     text = update.message.text
 
@@ -1735,7 +1709,7 @@ async def message_handler(update, context):
             await update.message.reply_text(
                 f"✅ <b>Portal Saved!</b>\n\n{reply_text}",
                 parse_mode=ParseMode.HTML,
-                reply_markup=get_main_menu_markup(user_id)
+                reply_markup=get_main_menu_markup()
             )
         else:
             await update.message.reply_text(
@@ -1764,65 +1738,6 @@ async def message_handler(update, context):
             )
         return
 
-    # ─── Default: show main menu ───
-    pm = get_proxy_manager()
-    mode = context.user_data.get("selected_mode", "num6")
-    active = pm.get_active_count()
-    saved_url = get_user_portal(user_id)
-
-    menu_text = _build_main_menu_text(mode, active, saved_url, user_id)
-    await update.message.reply_text(
-        menu_text,
-        parse_mode=ParseMode.HTML,
-        reply_markup=get_main_menu_markup(user_id)
-    )
-
-
-# ==============================================================================
-#  ★ SAVED COMMAND HANDLER
-# ==============================================================================
-
-async def cmd_saved(update, context):
-    """★ /saved command to view saved job"""
-    user_id = update.effective_user.id
-    saved = get_saved_state(user_id)
-
-    if saved:
-        hit_details = saved.get("hit_details", [])
-        hits_text = ""
-        for h in hit_details[-10:]:
-            hits_text += f"\n  ▸ <code>{h.get('code','?')}</code> • {h.get('plan','?')} • {h.get('time_str','?')}"
-        if not hits_text:
-            hits_text = "\n  💀 No hits"
-
-        text = (
-            "💾 <b>SAVED JOB</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"📜 Mode:   <code>{MODES.get(saved.get('mode','num6'), '')}</code>\n"
-            f"👁️ Tried:  <code>{saved.get('tried', 0):,}</code>\n"
-            f"🩸 Hits:   <code>{saved.get('hits', 0)}</code>\n"
-            f"⚠️ Limits: <code>{saved.get('limits', 0)}</code>\n"
-            f"❌ Errors: <code>{saved.get('net', 0)}</code>\n"
-            f"🗡️ Last:   <code>{saved.get('last_hit', '—')}</code>\n"
-            f"🕐 Saved:  <code>{saved.get('updated_at', 'N/A')}</code>\n"
-            "\n"
-            f"🎁 <b>HITS</b>{hits_text}\n"
-            "\n"
-            "⚡ Press START to resume"
-        )
-        markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("⚡ RESUME", callback_data="btn_start_scanner"),
-             InlineKeyboardButton("🗑️ DELETE", callback_data="btn_delete_saved")],
-            [InlineKeyboardButton("🦇 RETURN", callback_data="btn_back_main")],
-        ])
-    else:
-        text = "💾 <b>No Saved Job</b>\n\n💀 Nothing to resume"
-        markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🦇 RETURN", callback_data="btn_back_main")]
-        ])
-
-    await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
-
 
 # ==============================================================================
 #  MAIN
@@ -1834,15 +1749,8 @@ def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # Commands
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("help", cmd_help))
-    app.add_handler(CommandHandler("saved", cmd_saved))  # ★ /saved command
-
-    # Callbacks
     app.add_handler(CallbackQueryHandler(callback_handler))
-
-    # Messages
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
     log(bgreen + "[Bot] Starting NGATON..." + reset)
