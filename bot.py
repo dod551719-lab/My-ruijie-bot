@@ -78,8 +78,8 @@ def log(*args, **kwargs):
 #  CONFIG
 # ==============================================================================
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8806693453:AAEK1F7FTsAHMc5PdfeIYeIlWHJgbnGRb8o")
-ADMIN_IDS = [8806693453]
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8400956534:AAGhysVeI9CqHJX8wuVrpguWlZPbRu6Q9Eg")
+ADMIN_IDS = [7856294500]
 CONTACT_USERNAME = "@NgaTON_0"
 CONTACT_LINK = "https://t.me/NgaTON_0"
 
@@ -134,6 +134,7 @@ _MODE_SPEC: Dict[str, Tuple[tuple, int]] = {
     "num9": (_T_D, 9), "num10": (_T_D, 10),
     "eng6": (_T_A, 6), "eng7": (_T_A, 7), "eng8": (_T_A, 8),
     "mix6": (_T_M, 6), "mix7": (_T_M, 7), "mix8": (_T_M, 8),
+    "mix9": (_T_M, 9),
     "abc6": (_T_A, 6),
 }
 
@@ -142,6 +143,7 @@ MODES = {
     "num9": "🩸 09 • NUM", "num10": "🩸 10 • NUM",
     "eng6": "🦇 06 • ENG", "eng7": "🦇 07 • ENG", "eng8": "🦇 08 • ENG",
     "mix6": "💀 06 • MIX", "mix7": "💀 07 • MIX", "mix8": "💀 08 • MIX",
+    "mix9": "💀 09 • MIX",
     "abc6": "📜 06 • ABC", "custom": "🔮 Custom",
 }
 
@@ -1418,7 +1420,8 @@ def get_mode_menu_markup():
         [InlineKeyboardButton("💀 06 MIX", callback_data="set_mode_mix6"),
          InlineKeyboardButton("💀 07 MIX", callback_data="set_mode_mix7")],
         [InlineKeyboardButton("💀 08 MIX", callback_data="set_mode_mix8"),
-         InlineKeyboardButton("📜 06 ABC", callback_data="set_mode_abc6")],
+         InlineKeyboardButton("💀 09 MIX", callback_data="set_mode_mix9")],
+        [InlineKeyboardButton("📜 06 ABC", callback_data="set_mode_abc6")],
         [InlineKeyboardButton("🔮 CUSTOM", callback_data="set_mode_custom")],
         [InlineKeyboardButton("🦇 RETURN", callback_data="btn_back_main")],
     ])
@@ -1799,3 +1802,4 @@ if __name__ == "__main__":
     except BaseException as e:
         log(bred + f"\n[FATAL] {type(e).__name__}: {e}" + reset)
         traceback.print_exc()
+
